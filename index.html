@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trading Automático Kaspa v0.1</title>
+    <title>Trading Automático Kaspa v0.2</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -55,19 +55,22 @@
 
     <script>
         // Variables iniciales
-        let kasHoldings = 1000; // Tus 1000 Kaspa iniciales
-        let usdtHoldings = 0;   // USDT inicial
-        let lastSellPrice = null; // Último precio de venta
-        let priceHistory = []; // Historial de precios para indicadores técnicos
+        let kasHoldings = 1000;
+        let usdtHoldings = 0;
+        let lastSellPrice = null;
+        let priceHistory = [];
 
         // Obtener precio actual de Kaspa desde CoinGecko
         async function fetchKaspaPrice() {
             try {
                 const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=kaspa&vs_currencies=usd');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 const data = await response.json();
-                return data.kaspa.usd;
+                console.log('Precio actual:', data);
+                return data.kaspa?.usd || null;
             } catch (error) {
                 console.error('Error fetching price:', error);
+                document.getElementById('price').textContent = 'Error al cargar el precio';
                 return null;
             }
         }
@@ -76,8 +79,10 @@
         async function fetchKaspaHistory() {
             try {
                 const response = await fetch('https://api.coingecko.com/api/v3/coins/kaspa/market_chart?vs_currency=usd&days=1&interval=minutely');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 const data = await response.json();
-                return data.prices.map(p => p[1]); // Extraer solo los precios del array [timestamp, price]
+                console.log('Historial de precios:', data.prices);
+                return data.prices.map(p => p[1]); // Extraer precios
             } catch (error) {
                 console.error('Error fetching history:', error);
                 return [];
@@ -95,7 +100,7 @@
             }
             const avgGain = gains / 14;
             const avgLoss = losses / 14;
-            const rs = avgGain / (avgLoss || 1); // Evitar división por 0
+            const rs = avgGain / (avgLoss || 1);
             return 100 - (100 / (1 + rs));
         }
 
@@ -109,7 +114,7 @@
             return { macd, signal };
         }
 
-        // Calcular niveles de Fibonacci (simulado)
+        // Calcular niveles de Fibonacci
         function calculateFibonacci(high, low) {
             const diff = high - low;
             return {
@@ -118,20 +123,21 @@
             };
         }
 
-        // Decidir si comprar, vender o mantener
+        // Análisis del mercado
         async function analyzeMarket() {
             const currentPrice = await fetchKaspaPrice();
             const history = await fetchKaspaHistory();
-            if (!currentPrice || history.length === 0) return;
 
-            // Actualizar historial de precios
-            priceHistory = history.slice(-26); // Últimos 26 precios para MACD y otros indicadores
+            if (!currentPrice || history.length === 0) {
+                document.getElementById('price').textContent = 'Error: No se pudieron cargar los datos';
+                document.getElementById('recommendation').textContent = 'Recomendación: Sin datos';
+                return;
+            }
 
-            // Mostrar precio actual y holdings
+            priceHistory = history.slice(-26); // Últimos 26 precios
             document.getElementById('price').textContent = `Precio actual de Kaspa: $${currentPrice.toFixed(6)}`;
             document.getElementById('holdings').textContent = `Tus holdings: ${kasHoldings.toFixed(2)} KAS | ${usdtHoldings.toFixed(2)} USDT`;
 
-            // Calcular indicadores
             const rsi = calculateRSI(priceHistory);
             const macd = calculateMACD(priceHistory);
             const fib = calculateFibonacci(Math.max(...priceHistory), Math.min(...priceHistory));
@@ -139,13 +145,10 @@
             let recommendation = 'Mantener';
             const recElement = document.getElementById('recommendation');
 
-            // Lógica de trading
             if (kasHoldings > 0 && rsi > 70 && macd?.macd < macd?.signal && currentPrice > fib.fib382) {
-                // Vender si RSI indica sobrecompra y MACD cruza a la baja
                 recommendation = 'Vender';
                 recElement.className = 'sell';
             } else if (usdtHoldings > 0 && rsi < 30 && macd?.macd > macd?.signal && currentPrice < (lastSellPrice * 0.98 || currentPrice)) {
-                // Comprar si RSI indica sobreventa, MACD cruza al alza y el precio bajó un 2%
                 recommendation = 'Comprar';
                 recElement.className = 'buy';
             } else {
@@ -153,11 +156,17 @@
             }
 
             recElement.textContent = `Recomendación: ${recommendation}`;
+            console.log(`RSI: ${rsi}, MACD: ${macd?.macd}, Signal: ${macd?.signal}, Fib382: ${fib.fib382}`);
         }
 
         // Ejecutar transacción
         function executeTrade() {
-            const currentPrice = parseFloat(document.getElementById('price').textContent.split('$')[1]);
+            const currentPriceText = document.getElementById('price').textContent;
+            if (currentPriceText.includes('Error')) {
+                alert('No hay datos válidos para ejecutar una transacción.');
+                return;
+            }
+            const currentPrice = parseFloat(currentPriceText.split('$')[1]);
             const rec = document.getElementById('recommendation').textContent.split(': ')[1];
 
             if (rec === 'Vender' && kasHoldings > 0) {
@@ -172,7 +181,7 @@
             } else {
                 alert('No hay acción recomendada o fondos insuficientes.');
             }
-            analyzeMarket(); // Actualizar interfaz
+            analyzeMarket();
         }
 
         // Actualizar cada 30 segundos
