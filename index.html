@@ -29,18 +29,18 @@
     <script>
         // Variables iniciales
         let kasHoldings = 1000;
-        let usdHoldings = 0; // Cambié de USDT a USD para coincidir con la API de Kaspa
+        let usdHoldings = 0;
         let lastSellPrice = null;
         let lastBuyPrice = null;
-        const profitThreshold = 0.02;
-        const lossThreshold = 0.02;
+        const profitThreshold = 0.02; // 2% de ganancia
+        const lossThreshold = 0.02;   // 2% de pérdida
 
         let fibLevels = {};
         let support = 0;
         let resistance = 0;
         let trend = "neutral";
 
-        // Función para obtener el precio de Kaspa desde la API oficial de Kaspa
+        // Función para obtener el precio de Kaspa desde la API oficial
         async function fetchKaspaPrice() {
             try {
                 const response = await fetch('https://api.kaspa.org/info/price?stringOnly=true', {
@@ -51,7 +51,7 @@
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const priceString = await response.text();
-                console.log("Precio recibido como texto:", priceString); // Depuración
+                console.log("Precio recibido:", priceString); // Depuración
                 const currentPrice = parseFloat(priceString);
                 if (isNaN(currentPrice)) {
                     throw new Error("No se pudo convertir el precio a número");
@@ -63,7 +63,7 @@
             }
         }
 
-        // Función para calcular niveles Fibonacci dinámicos
+        // Calcular niveles Fibonacci dinámicos
         function calculateFibonacci(currentPrice) {
             const volatility = 0.2; // Ajusta según el mercado
             const high = currentPrice * (1 + volatility);
@@ -95,7 +95,7 @@
         async function updateDashboard() {
             const currentPrice = await fetchKaspaPrice();
             if (!currentPrice) {
-                document.getElementById("price").innerText = "Error al cargar el precio. Revisa la consola para más detalles.";
+                document.getElementById("price").innerText = "Error al cargar el precio. Revisa la consola.";
                 return;
             }
 
@@ -145,8 +145,8 @@
             updateDashboard();
         }
 
-        // Actualización automática cada 30 segundos
-        setInterval(updateDashboard, 30000);
+        // Actualización automática cada 5 segundos
+        setInterval(updateDashboard, 5000);
 
         // Iniciar
         updateDashboard();
