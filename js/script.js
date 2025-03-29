@@ -1,7 +1,7 @@
 const API_URL = "http://localhost:3000/kaspa";
 
-let balanceUSDT = 1000;
-let balanceKaspa = 0;
+let balanceUSDT = 0;
+let balanceKaspa = 1000;
 let lastTradePrice = 0;
 let tradeHistory = [];
 const tradingFee = 0.001;
