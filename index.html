@@ -3,35 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulación de Trading Kaspa</title>
-    <link rel="stylesheet" href="css/styles.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>Kaspa Trading Bot</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; text-align: center; }
+        #container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
+        h1 { color: #333; }
+        #price, #holdings, #recommendation { margin: 10px 0; font-size: 1.2em; }
+        #recommendation { font-weight: bold; }
+        .buy { color: green; }
+        .sell { color: red; }
+        .hold { color: gray; }
+        button { padding: 10px 20px; font-size: 1em; cursor: pointer; background-color: #007BFF; color: white; border: none; border-radius: 5px; }
+        button:hover { background-color: #0056b3; }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Simulación de Trading Kaspa</h1>
-        <div class="balance">
-            <p id="balance-usdt">Saldo USDT: $1000</p>
-            <p id="balance-kaspa">Saldo Kaspa: 0</p>
-        </div>
-        
-        <div class="signals">
-            <p id="kaspa-price">Precio Kaspa: $0.0000</p>
-            <p id="kaspa-rsi">RSI: 0.00</p>
-            <p id="kaspa-macd">MACD: 0.0000</p>
-            <p id="kaspa-sma">SMA: 0.0000</p>
-            <p id="kaspa-ema">EMA: 0.0000</p>
-            <p id="kaspa-signal">Señal de Trading: ⚪ Esperando mejor oportunidad...</p>
-        </div>
-
-        <div class="trade-history">
-            <h2>Historial de Operaciones</h2>
-            <ul id="trade-history"></ul>
-        </div>
-
-        <canvas id="price-chart" width="400" height="200"></canvas>
+    <div id="container">
+        <h1>Kaspa Trading Bot</h1>
+        <div id="price">Precio actual de KAS/USDT: Cargando...</div>
+        <div id="holdings">Tus holdings: 1000 KAS | 0 USDT</div>
+        <div id="recommendation">Recomendación: Cargando...</div>
+        <button onclick="manualUpdate()">Actualizar manualmente</button>
     </div>
 
-    <script src="js/script.js"></script>
+    <script>
+        // Variables iniciales
+        let kasHoldings = 1000;
+        let usdtHoldings = 0;
+        let lastSellPrice = null;
+        let lastBuyPrice = null; // Se establecerá automáticamente al inicio
+        const profitThreshold = 0.02;
+        const lossThreshold = 0.02;
+
+        // Niveles dinámicos (se ajustarán automáticamente)
+        let fibLevels = {};
+        let support = 0;
+        let resistance = 0;
+
+        let trend = "neutral";
+
+        // Función para obtener el precio de Kaspa desde CoinGecko
+        async function fetchKaspaPrice() {
+            try {
+                const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=kaspa&vs_currencies=usdt');
+                const data = await response.json();
+                return data.kaspa.usdt;
+            } catch (error) {
+                console.error("Error fetching price:", error);
+                return null;
+            }
+        }
+
+        // Función para calcular niveles Fibonacci dinámicos
+        function calculateFibonacci(currentPrice) {
+            // Suponemos un rango de volatilidad del 20% para estimar high y low
+            const volatility = 0.2; // Ajusta según el mercado
+            const high = currentPrice * (1 + volatility);
+            const low = currentPrice * (1 - volatility);
+            const diff = high - low;
+
+            return {
+                0: low,
+                0.382: low + diff * 0.382,
+                0.5: low + diff * 0.5,
+                0.618: low + diff * 0.618,
+                1: high
+            };
+        }
+
+        // Función para ajustar niveles automáticamente
+        async function adjustLevels() {
+            const currentPrice = await fetchKaspaPrice();
+            if (!currentPrice) return;
+
+            // Establecer lastBuyPrice al inicio si es null
+            if (!lastBuyPrice) lastBuyPrice = currentPrice;
+
+            // Calcular niveles Fibonacci
+            fibLevels = calculateFibonacci(currentPrice);
+
+            // Ajustar soporte y resistencia
+            support = fibLevels[0];     // Nivel 0% como soporte
+            resistance = fibLevels[1];  // Nivel 100% como resistencia
+        }
+
+        // Función para analizar y recomendar
+        async function updateDashboard() {
+            const currentPrice = await fetchKaspaPrice();
+            if (!currentPrice) {
+                document.getElementById("price").innerText = "Error al cargar el precio";
+                return;
+            }
+
+            // Ajustar niveles dinámicamente
+            await adjustLevels();
+
+            // Actualizar interfaz
+            document.getElementById("price").innerText = `Precio actual de KAS/USDT: $${currentPrice.toFixed(5)}`;
+            document.getElementById("holdings").innerText = `Tus holdings: ${kasHoldings.toFixed(2)} KAS | ${usdtHoldings.toFixed(2)} USDT`;
+
+            // Simulación de tendencia
+            if (currentPrice > lastBuyPrice * (1 + profitThreshold)) trend = "bullish";
+            else if (currentPrice < lastBuyPrice * (1 - lossThreshold)) trend = "bearish";
+            else trend = "neutral";
+
+            // Recomendación
+            let recommendation = analyzePrice(currentPrice);
+            document.getElementById("recommendation").innerText = `Recomendación: ${recommendation.text}`;
+            document.getElementById("recommendation").className = recommendation.action;
+        }
+
+        // Análisis basado en precio, Fibonacci, soportes/resistencias y tendencia
+        function analyzePrice(price) {
+            if (kasHoldings > 0) {
+                if (
+                    price >= lastBuyPrice * (1 + profitThreshold) &&
+                    (price >= resistance || price >= fibLevels[1] || trend === "bullish")
+                ) {
+                    usdtHoldings = kasHoldings * price;
+                    lastSellPrice = price;
+                    kasHoldings = 0;
+                    return { text: "VENDER (potencial máximo alcanzado)", action: "sell" };
+                }
+            } else if (usdtHoldings > 0) {
+                if (
+                    price <= lastSellPrice * (1 - lossThreshold) &&
+                    (price <= support || price <= fibLevels[0] || trend === "bearish")
+                ) {
+                    kasHoldings = usdtHoldings / price;
+                    lastBuyPrice = price;
+                    usdtHoldings = 0;
+                    return { text: "COMPRAR (precio bajo detectado)", action: "buy" };
+                }
+            }
+            return { text: "MANTENER (sin señales claras)", action: "hold" };
+        }
+
+        // Actualización manual
+        function manualUpdate() {
+            updateDashboard();
+        }
+
+        // Actualización automática cada 30 segundos
+        setInterval(updateDashboard, 30000);
+
+        // Iniciar el dashboard
+        updateDashboard();
+    </script>
 </body>
 </html>
