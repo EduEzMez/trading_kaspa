@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Automático Kaspa</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        #container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #price, #holdings, #recommendation {
+            margin: 10px 0;
+            font-size: 18px;
+        }
+        #recommendation {
+            font-weight: bold;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .buy { background-color: #90ee90; }
+        .sell { background-color: #ffcccb; }
+        .hold { background-color: #fffacd; }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Trading Automático Kaspa</h1>
+        <div id="price">Precio actual de Kaspa: Cargando...</div>
+        <div id="holdings">Tus holdings: 1000 KAS | 0 USDT</div>
+        <div id="recommendation">Recomendación: Cargando...</div>
+        <button onclick="executeTrade()">Ejecutar Transacción</button>
+    </div>
+
+    <script>
+        // Variables iniciales
+        let kasHoldings = 1000; // Tus 1000 Kaspa iniciales
+        let usdtHoldings = 0;   // USDT inicial
+        let lastSellPrice = null; // Último precio de venta
+        const apiKey = 'TU_API_KEY_DE_COINMARKETCAP'; // Reemplaza con tu API Key
+
+        // Historial de precios para indicadores técnicos (simulado)
+        let priceHistory = [];
+
+        // Obtener precio de Kaspa desde CoinMarketCap
+        async function fetchKaspaPrice() {
+            try {
+                const response = await fetch(`https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol=KAS&convert=USD`, {
+                    headers: { 'X-CMC_PRO_API_KEY': apiKey }
+                });
+                const data = await response.json();
+                return data.data.KAS.quote.USD.price;
+            } catch (error) {
+                console.error('Error fetching price:', error);
+                return null;
+            }
+        }
+
+        // Calcular RSI simple (período 14)
+        function calculateRSI(prices) {
+            if (prices.length < 14) return null;
+            let gains = 0, losses = 0;
+            for (let i = 1; i < 14; i++) {
+                const diff = prices[i] - prices[i - 1];
+                if (diff > 0) gains += diff;
+                else losses -= diff;
+            }
+            const avgGain = gains / 14;
+            const avgLoss = losses / 14;
+            const rs = avgGain / (avgLoss || 1); // Evitar división por 0
+            return 100 - (100 / (1 + rs));
+        }
+
+        // Calcular MACD simple
+        function calculateMACD(prices) {
+            if (prices.length < 26) return null;
+            const ema12 = prices.slice(-12).reduce((a, b) => a + b, 0) / 12;
+            const ema26 = prices.slice(-26).reduce((a, b) => a + b, 0) / 26;
+            const macd = ema12 - ema26;
+            const signal = prices.slice(-9).reduce((a, b) => a + b, 0) / 9;
+            return { macd, signal };
+        }
+
+        // Calcular niveles de Fibonacci (simulado)
+        function calculateFibonacci(high, low) {
+            const diff = high - low;
+            return {
+                fib382: high - (diff * 0.382),
+                fib618: high - (diff * 0.618)
+            };
+        }
+
+        // Decidir si comprar, vender o mantener
+        async function analyzeMarket() {
+            const currentPrice = await fetchKaspaPrice();
+            if (!currentPrice) return;
+
+            // Actualizar historial de precios
+            priceHistory.push(currentPrice);
+            if (priceHistory.length > 26) priceHistory.shift();
+
+            // Mostrar precio actual
+            document.getElementById('price').textContent = `Precio actual de Kaspa: $${currentPrice.toFixed(6)}`;
+            document.getElementById('holdings').textContent = `Tus holdings: ${kasHoldings.toFixed(2)} KAS | ${usdtHoldings.toFixed(2)} USDT`;
+
+            // Calcular indicadores
+            const rsi = calculateRSI(priceHistory);
+            const macd = calculateMACD(priceHistory);
+            const fib = calculateFibonacci(Math.max(...priceHistory), Math.min(...priceHistory));
+
+            let recommendation = 'Mantener';
+            const recElement = document.getElementById('recommendation');
+
+            // Lógica de trading
+            if (kasHoldings > 0 && rsi > 70 && macd?.macd < macd?.signal && currentPrice > fib.fib382) {
+                // Vender si RSI indica sobrecompra y MACD cruza a la baja
+                recommendation = 'Vender';
+                recElement.className = 'sell';
+            } else if (usdtHoldings > 0 && rsi < 30 && macd?.macd > macd?.signal && currentPrice < lastSellPrice * 0.98) {
+                // Comprar si RSI indica sobreventa, MACD cruza al alza y el precio bajó un 2%
+                recommendation = 'Comprar';
+                recElement.className = 'buy';
+            } else {
+                recElement.className = 'hold';
+            }
+
+            recElement.textContent = `Recomendación: ${recommendation}`;
+        }
+
+        // Ejecutar transacción
+        function executeTrade() {
+            const currentPrice = parseFloat(document.getElementById('price').textContent.split('$')[1]);
+            const rec = document.getElementById('recommendation').textContent.split(': ')[1];
+
+            if (rec === 'Vender' && kasHoldings > 0) {
+                usdtHoldings = kasHoldings * currentPrice;
+                lastSellPrice = currentPrice;
+                kasHoldings = 0;
+                alert(`Vendiste ${kasHoldings} KAS por ${usdtHoldings.toFixed(2)} USDT`);
+            } else if (rec === 'Comprar' && usdtHoldings > 0) {
+                kasHoldings = usdtHoldings / currentPrice;
+                usdtHoldings = 0;
+                alert(`Compraste ${kasHoldings.toFixed(2)} KAS por ${usdtHoldings} USDT`);
+            } else {
+                alert('No hay acción recomendada o fondos insuficientes.');
+            }
+            analyzeMarket(); // Actualizar interfaz
+        }
+
+        // Actualizar cada 30 segundos
+        setInterval(analyzeMarket, 30000);
+        analyzeMarket(); // Primera ejecución
+    </script>
+</body>
+</html>
